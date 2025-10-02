@@ -4,7 +4,8 @@
  */
 
 import fs from 'node:fs'
-import { URL } from 'node:url'
+import { URL, domainToASCII } from 'node:url'
+import { isIP } from 'node:net'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 import { type Request, type Response, type NextFunction } from 'express'
@@ -42,8 +43,15 @@ export function profileImageUrlUpload () {
         return
       }
       
-      // Only allow if host is on allow-list
-      if (!ALLOWED_IMAGE_HOSTS.includes(parsedUrl.hostname)) {
+      // Normalize hostname for punycode/unicode, force lowercase
+      const normalizedHost = domainToASCII(parsedUrl.hostname).toLowerCase()
+      // Disallow IP addresses as hostnames
+      if (isIP(normalizedHost)) {
+        res.status(400).send('IP addresses not allowed as image host')
+        return
+      }
+      // Only allow if host is on allow-list (case-insensitive compare)
+      if (!ALLOWED_IMAGE_HOSTS.map(h => domainToASCII(h).toLowerCase()).includes(normalizedHost)) {
         res.status(400).send('Unapproved image host')
         return
       }
