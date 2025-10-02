@@ -4,6 +4,7 @@
  */
 
 import fs from 'node:fs'
+import { URL } from 'node:url'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 import { type Request, type Response, type NextFunction } from 'express'
@@ -18,6 +19,35 @@ export function profileImageUrlUpload () {
     if (req.body.imageUrl !== undefined) {
       const url = req.body.imageUrl
       if (url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
+      
+      // SSRF mitigation: allow-list hostnames
+      const ALLOWED_IMAGE_HOSTS = [
+        'images.example.com',
+        'cdn.example.net'
+        // Add allowed image hostnames here
+      ]
+      
+      let parsedUrl: URL
+      try {
+        parsedUrl = new URL(url)
+      } catch (e) {
+        res.status(400).send('Invalid image URL')
+        return
+      }
+      
+      // Only allow http(s)
+      const allowedProtocols = ['http:', 'https:']
+      if (!allowedProtocols.includes(parsedUrl.protocol)) {
+        res.status(400).send('Unsupported protocol in image URL')
+        return
+      }
+      
+      // Only allow if host is on allow-list
+      if (!ALLOWED_IMAGE_HOSTS.includes(parsedUrl.hostname)) {
+        res.status(400).send('Unapproved image host')
+        return
+      }
+      
       const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
       if (loggedInUser) {
         try {
